@@ -10,46 +10,52 @@ This roadmap serves as a comprehensive implementation guide, focusing on selecte
 
 ## 2. Technology Stack Implementation
 
-### 2.1 Core Backend Framework: Node.js with Express and TypeScript
+### 2.1 Core Backend Framework: Python with FastAPI
 **Implementation Details:**
-- Use Node.js 18+ with Express 4.x and TypeScript 5.0+
-- Configure strict TypeScript options for maximum type safety
-- Set up ESLint with appropriate rules for backend development
-- Implement error handling middleware and request validation
+- Use Python 3.10+ with FastAPI and Pydantic models
+- Configure type hints throughout the codebase for better IDE support and error detection
+- Set up linting with flake8, black, and isort for code consistency
+- Implement middleware for error handling, authentication, and request validation
 
 **Code Example: Project Structure**
-```typescript
-// Basic server setup with TypeScript
-import express, { Request, Response, NextFunction } from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-import { errorHandler } from './middleware/errorHandler';
-import { routes } from './routes';
+```python
+# filepath: app/main.py
+from fastapi import FastAPI, Request, Depends
+from fastapi.middleware.cors import CORSMiddleware
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
-const app = express();
+from app.middleware.error_handler import error_handler
+from app.routes import router
 
-// Middleware
-app.use(helmet()); // Security headers
-app.use(cors());   // CORS handling
-app.use(express.json());
+app = FastAPI(title="Learning Platform API")
 
-// Routes
-app.use('/api', routes);
+# Middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Configured based on environment
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-// Error handling
-app.use(errorHandler);
+# Routes
+app.include_router(router, prefix="/api")
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+# Error handling
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    return error_handler(request, exc)
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
 ```
 
 **Dev vs. Prod Considerations:**
-- Development uses `nodemon` or `ts-node-dev` for hot reloading
-- Production uses compiled JS with source maps for debugging
+- Development uses uvicorn with hot reload enabled
+- Production uses Gunicorn with uvicorn workers for better performance and reliability
 - Different environment variable files for dev (.env.development) and prod (.env.production)
-- Additional logging in development, structured and minimal logging in production
+- Additional logging in development, structured JSON logging in production
 
 ### 2.2 Backend Architecture: Microservices with API Gateway
 **Implementation Details:**
@@ -64,7 +70,7 @@ app.listen(PORT, () => {
 
 **Initial Structure:**
 ```
-/src
+/app
   /gateway                 # API Gateway service
   /services
     /auth                  # Authentication service
@@ -98,23 +104,27 @@ app.listen(PORT, () => {
 - Set up indices for common queries
 
 **Code Example: Firebase Setup**
-```typescript
-import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+```python
+# filepath: app/database/firebase.py
+import firebase_admin
+from firebase_admin import credentials, firestore
+import os
 
-const firebaseConfig = {
-  apiKey: process.env.FIREBASE_API_KEY,
-  authDomain: process.env.FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.FIREBASE_PROJECT_ID,
-  storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.FIREBASE_APP_ID
-};
+cred = credentials.Certificate({
+    "type": "service_account",
+    "project_id": os.environ.get("FIREBASE_PROJECT_ID"),
+    "private_key_id": os.environ.get("FIREBASE_PRIVATE_KEY_ID"),
+    "private_key": os.environ.get("FIREBASE_PRIVATE_KEY").replace("\\n", "\n"),
+    "client_email": os.environ.get("FIREBASE_CLIENT_EMAIL"),
+    "client_id": os.environ.get("FIREBASE_CLIENT_ID"),
+    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+    "token_uri": "https://oauth2.googleapis.com/token",
+    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+    "client_x509_cert_url": os.environ.get("FIREBASE_CLIENT_CERT_URL")
+})
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-
-export { db };
+firebase_app = firebase_admin.initialize_app(cred)
+db = firestore.client()
 ```
 
 #### MongoDB Implementation
@@ -125,47 +135,61 @@ export { db };
 - Configure connection pooling and error handling
 
 **Code Example: MongoDB Connection**
-```typescript
-import mongoose from 'mongoose';
-import { logger } from '../utils/logger';
+```python
+# filepath: app/database/mongodb.py
+from motor.motor_asyncio import AsyncIOMotorClient
+import logging
+import os
 
-const connectDB = async (): Promise<void> => {
-  try {
-    const conn = await mongoose.connect(process.env.MONGODB_URI!);
-    logger.info(`MongoDB Connected: ${conn.connection.host}`);
-  } catch (error) {
-    logger.error(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    process.exit(1);
-  }
-};
+logger = logging.getLogger(__name__)
 
-export default connectDB;
+async def connect_to_mongo():
+    try:
+        client = AsyncIOMotorClient(os.environ.get("MONGODB_URI"))
+        await client.admin.command('ping')
+        logger.info(f"MongoDB Connected: {client.address}")
+        return client
+    except Exception as e:
+        logger.error(f"Error connecting to MongoDB: {str(e)}")
+        raise
+
+async def get_database():
+    client = await connect_to_mongo()
+    return client[os.environ.get("MONGODB_DATABASE")]
 ```
 
 #### PostgreSQL Implementation
 **Implementation Details:**
 - Set up PostgreSQL database for structured data
 - Design schema for payment records and subscription data
-- Configure connection pooling with pg-pool
-- Implement database migrations using a tool like Knex.js or TypeORM
+- Configure connection pooling with asyncpg
+- Implement database migrations using Alembic
 
-**Code Example: PostgreSQL Connection with TypeORM**
-```typescript
-import { DataSource } from "typeorm";
+**Code Example: PostgreSQL Connection with SQLAlchemy**
+```python
+# filepath: app/database/postgres.py
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import declarative_base, sessionmaker
+import os
 
-export const AppDataSource = new DataSource({
-  type: "postgres",
-  host: process.env.PG_HOST,
-  port: parseInt(process.env.PG_PORT || "5432"),
-  username: process.env.PG_USER,
-  password: process.env.PG_PASSWORD,
-  database: process.env.PG_DATABASE,
-  entities: ["src/entities/**/*.ts"],
-  migrations: ["src/migrations/**/*.ts"],
-  synchronize: process.env.NODE_ENV === "development",
-  logging: process.env.NODE_ENV === "development",
-  ssl: process.env.NODE_ENV === "production"
-});
+DATABASE_URL = os.environ.get("DATABASE_URL")
+
+engine = create_async_engine(
+    DATABASE_URL,
+    echo=os.environ.get("DEBUG", "False").lower() == "true"
+)
+
+AsyncSessionLocal = sessionmaker(
+    engine, class_=AsyncSession, expire_on_commit=False
+)
+Base = declarative_base()
+
+async def get_db():
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+        finally:
+            await session.close()
 ```
 
 #### Vector Database Implementation (Pinecone)
@@ -176,16 +200,20 @@ export const AppDataSource = new DataSource({
 - Create retrieval utilities for similarity search
 
 **Code Example: Pinecone Setup**
-```typescript
-import { Pinecone } from '@pinecone-database/pinecone';
+```python
+# filepath: app/database/vector_store.py
+import pinecone
+import os
 
-const pinecone = new Pinecone({
-  apiKey: process.env.PINECONE_API_KEY!
-});
+api_key = os.environ.get("PINECONE_API_KEY")
+environment = os.environ.get("PINECONE_ENVIRONMENT")
+index_name = os.environ.get("PINECONE_INDEX")
 
-const index = pinecone.Index(process.env.PINECONE_INDEX!);
+pinecone.init(api_key=api_key, environment=environment)
+index = pinecone.Index(index_name)
 
-export { index as vectorStore };
+def get_vector_store():
+    return index
 ```
 
 **Dev vs. Prod Considerations:**
@@ -205,36 +233,37 @@ export { index as vectorStore };
 - Design the agent orchestration framework
 
 **Code Example: Model Provider Abstraction**
-```typescript
-import { ChatOpenAI } from "langchain/chat_models/openai";
-import { ChatAnthropic } from "langchain/chat_models/anthropic";
-import { BaseChatModel } from "langchain/chat_models";
+```python
+# filepath: app/ai/model_provider.py
+from enum import Enum
+from langchain.chat_models import ChatOpenAI, ChatAnthropic
+from langchain.schema.language_model import BaseLanguageModel
 
-export enum ModelProvider {
-  OPENAI = "openai",
-  ANTHROPIC = "anthropic",
-  // Add others as needed
-}
+class ModelProvider(str, Enum):
+    OPENAI = "openai"
+    ANTHROPIC = "anthropic"
+    # Add others as needed
 
-export function getModelForProvider(
-  provider: ModelProvider,
-  options: { temperature: number; modelName: string }
-): BaseChatModel {
-  switch (provider) {
-    case ModelProvider.OPENAI:
-      return new ChatOpenAI({
-        temperature: options.temperature,
-        modelName: options.modelName,
-      });
-    case ModelProvider.ANTHROPIC:
-      return new ChatAnthropic({
-        temperature: options.temperature,
-        modelName: options.modelName,
-      });
-    default:
-      throw new Error(`Unsupported model provider: ${provider}`);
-  }
-}
+def get_model_for_provider(
+    provider: ModelProvider,
+    temperature: float = 0.0,
+    model_name: str = None
+) -> BaseLanguageModel:
+    """
+    Returns a language model instance based on the specified provider.
+    """
+    if provider == ModelProvider.OPENAI:
+        return ChatOpenAI(
+            temperature=temperature,
+            model_name=model_name or "gpt-4o"
+        )
+    elif provider == ModelProvider.ANTHROPIC:
+        return ChatAnthropic(
+            temperature=temperature,
+            model_name=model_name or "claude-3-opus-20240229"
+        )
+    else:
+        raise ValueError(f"Unsupported model provider: {provider}")
 ```
 
 ### 3.2 Agent Implementation
@@ -247,23 +276,32 @@ export function getModelForProvider(
 - Design caching mechanisms for frequent queries
 
 **Code Example: Vector Search Function**
-```typescript
-import { vectorStore } from '../database/pinecone';
-import { OpenAIEmbeddings } from "langchain/embeddings/openai";
+```python
+# filepath: app/ai/retrieval.py
+from app.database.vector_store import get_vector_store
+from langchain.embeddings import OpenAIEmbeddings
+import asyncio
 
-const embeddings = new OpenAIEmbeddings();
+embeddings = OpenAIEmbeddings()
+vector_store = get_vector_store()
 
-export async function retrieveRelevantContext(query: string, topK: number = 5) {
-  const queryEmbedding = await embeddings.embedQuery(query);
-  
-  const results = await vectorStore.query({
-    vector: queryEmbedding,
-    topK,
-    includeMetadata: true
-  });
-  
-  return results.matches.map(match => match.metadata);
-}
+async def retrieve_relevant_context(query: str, top_k: int = 5):
+    """
+    Retrieves relevant context for a given query using vector similarity search.
+    """
+    # Generate embedding for the query
+    query_embedding = await asyncio.to_thread(
+        embeddings.embed_query, query
+    )
+    
+    # Retrieve similar vectors
+    results = vector_store.query(
+        vector=query_embedding,
+        top_k=top_k,
+        include_metadata=True
+    )
+    
+    return [match.metadata for match in results.matches]
 ```
 
 #### Reasoning & Guidance Agent
@@ -274,31 +312,35 @@ export async function retrieveRelevantContext(query: string, topK: number = 5) {
 - Design fallback mechanisms for when primary approach fails
 
 **Code Example: Hint Generation**
-```typescript
-import { ChatPromptTemplate } from "langchain/prompts";
-import { getModelForProvider, ModelProvider } from "../utils/modelProvider";
+```python
+# filepath: app/ai/reasoning.py
+from langchain.prompts import ChatPromptTemplate
+from app.ai.model_provider import get_model_for_provider, ModelProvider
 
-const hintGenerationPrompt = ChatPromptTemplate.fromMessages([
-  ["system", "You are a mathematics tutor helping a student. Generate a hint that guides them toward the solution without giving it away completely."],
-  ["user", "Problem: {problem}\nStudent's work so far: {student_work}\nHint level (1-3, where 3 is most revealing): {hint_level}"]
-]);
+hint_generation_prompt = ChatPromptTemplate.from_messages([
+    ("system", "You are a mathematics tutor helping a student. Generate a hint that guides them toward the solution without giving it away completely."),
+    ("user", "Problem: {problem}\nStudent's work so far: {student_work}\nHint level (1-3, where 3 is most revealing): {hint_level}")
+])
 
-export async function generateProgressiveHint(problem: string, studentWork: string, hintLevel: number) {
-  const model = getModelForProvider(ModelProvider.OPENAI, { 
-    temperature: 0.3,
-    modelName: "gpt-4o"
-  });
-  
-  const chain = hintGenerationPrompt.pipe(model);
-  
-  const response = await chain.invoke({
-    problem,
-    student_work: studentWork,
-    hint_level: hintLevel
-  });
-  
-  return response.content;
-}
+async def generate_progressive_hint(problem: str, student_work: str, hint_level: int):
+    """
+    Generates a progressive hint for a given problem based on the student's work.
+    """
+    model = get_model_for_provider(
+        ModelProvider.OPENAI,
+        temperature=0.3,
+        model_name="gpt-4o"
+    )
+    
+    chain = hint_generation_prompt | model
+    
+    response = await chain.ainvoke({
+        "problem": problem,
+        "student_work": student_work,
+        "hint_level": hint_level
+    })
+    
+    return response.content
 ```
 
 ### 3.3 Agent Orchestration with LangGraph
@@ -309,34 +351,40 @@ export async function generateProgressiveHint(problem: string, studentWork: stri
 - Design error handling and graceful degradation
 
 **Code Example: Agent Graph Definition**
-```typescript
-import { createGraph } from "langchain/graph";
-import { end, start } from "langchain/graph/nodes";
-import { retrieveContext } from "./agents/retrieval";
-import { generateGuidance } from "./agents/reasoning";
-import { trackMemory } from "./agents/memory";
+```python
+# filepath: app/ai/agent_graph.py
+from langgraph.graph import StateGraph
+from typing import TypedDict, List, Dict, Any
+from app.ai.retrieval import retrieve_relevant_context
+from app.ai.reasoning import generate_progressive_hint
+from app.ai.memory import track_memory
 
-export const agentGraph = createGraph({
-  channels: {
-    query: { value: "" },
-    context: { value: [] },
-    guidance: { value: "" },
-    memory: { value: {} }
-  },
-  nodes: {
-    start,
-    retrieveContext,
-    generateGuidance,
-    trackMemory,
-    end
-  },
-  edges: {
-    start: { outgoing: ["retrieveContext"] },
-    retrieveContext: { outgoing: ["generateGuidance"] },
-    generateGuidance: { outgoing: ["trackMemory"] },
-    trackMemory: { outgoing: ["end"] }
-  }
-});
+# Define the state schema
+class AgentState(TypedDict):
+    query: str
+    context: List[Dict[str, Any]]
+    guidance: str
+    memory: Dict[str, Any]
+
+# Create the graph
+def create_agent_graph():
+    graph = StateGraph(AgentState)
+    
+    # Add nodes
+    graph.add_node("retrieve_context", retrieve_relevant_context)
+    graph.add_node("generate_guidance", generate_progressive_hint)
+    graph.add_node("track_memory", track_memory)
+    
+    # Build edges
+    graph.add_edge("start", "retrieve_context")
+    graph.add_edge("retrieve_context", "generate_guidance")
+    graph.add_edge("generate_guidance", "track_memory")
+    graph.add_edge("track_memory", "end")
+    
+    # Compile
+    agent_workflow = graph.compile()
+    
+    return agent_workflow
 ```
 
 **Dev vs. Prod Considerations:**

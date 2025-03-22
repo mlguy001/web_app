@@ -12,21 +12,21 @@ This discussion serves as a comprehensive guide for backend development decision
 
 ### 2.1 Core Backend Framework
 
-#### Recommendation: Node.js with Express and TypeScript
-Node.js with Express is recommended as the primary backend framework for this project based on several factors:
+#### Recommendation: Python with FastAPI
+Python with FastAPI is recommended as the primary backend framework for this project based on several factors:
 
-- **JavaScript Ecosystem Consistency**: Maintains the same language (TypeScript) across frontend and backend, reducing context switching for developers.
-- **Non-blocking I/O**: Well-suited for handling numerous concurrent connections and API requests.
-- **Extensive Package Ecosystem**: Rich npm ecosystem with packages for authentication, data validation, and API development.
-- **TypeScript Support**: Excellent TypeScript integration for type safety and improved developer experience.
-- **Serverless Potential**: Can be easily adapted to serverless functions if needed for scaling specific components.
+- **Superior AI/ML Ecosystem**: Python's rich ecosystem for machine learning, AI, and data processing is ideal for our multi-agent system implementation.
+- **LangChain/LangGraph Native Support**: These frameworks work most seamlessly with Python, reducing friction in development.
+- **Type Hints**: FastAPI provides excellent type hint integration similar to TypeScript for improved developer experience.
+- **Performance**: FastAPI offers high performance through Starlette and Pydantic, with async support.
+- **Easy Documentation**: Automatic OpenAPI documentation for all endpoints.
 
 #### Alternatives Considered:
 
-1. **Python (FastAPI/Flask)**
-   - **Pros**: Better ecosystem for ML/AI integration, excellent for data processing
-   - **Cons**: Different language from frontend, potentially more switching costs
-   - **Why Not**: While excellent for AI, the JavaScript ecosystem provides better frontend-backend consistency
+1. **Node.js with Express**
+   - **Pros**: JavaScript ecosystem consistency with frontend, extensive package ecosystem
+   - **Cons**: Less mature AI/ML libraries, potential performance limitations for compute-intensive AI tasks
+   - **Why Not**: The AI/ML advantages of Python outweigh the benefits of language consistency
 
 2. **Java/Spring Boot**
    - **Pros**: Strong enterprise support, robust type system, high performance
